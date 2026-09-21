@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 
 N=5
-LOG_FILE="monitor.log"
+LOG_FILE="/var/log/monitor.log"
 
 while true; do
     TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
