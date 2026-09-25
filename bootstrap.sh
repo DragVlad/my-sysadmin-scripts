@@ -29,6 +29,7 @@ EOF
         sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
         sudo systemctl enable --now docker
         sudo systemctl status docker --no-pager || truedock
+        sudo usermod -aG docker $USER && newgrp docker
         echo -e "\e[32mSuccess install Docker!\033[0m"
         docker -v
     fi
@@ -101,9 +102,63 @@ lv_mount() {
         df -h
         uuid=$(sudo blkid -s UUID -o value /dev/$vg_name/$lv_name)
         sudo tee -a /etc/fstab >/dev/null <<EOF
-UUID=${uuid}  /var/storage/smb  ext4  defaults  0 2
+UUID=${uuid}  /var/log  ext4  defaults  0 2
 EOF
         echo -e "\e[32m$uuid added to /etc/fstab\033[0m"
+    fi
+}
+
+docker_build() {
+    if docker images my_app | grep my_app; then
+        echo -e "\e[32mDocker image my_app ready, pass\033[0m"
+    else
+        echo -e "\e[32mDocker image my_app not ready, build\033[0m"
+        docker compose build
+        docker images
+    fi
+}
+
+docker_start() {
+    if docker compose images | grep my_app; then
+        echo -e "\e[32mmy_app running, pass\033[0m"
+        docker compose images
+    else
+        echo -e "\e[32mmy_app not running, start\033[0m"
+        docker compose up -d
+        docker compose images
+    fi
+}
+
+install_nginx() {
+    if nginx -v 2>&1 | grep "nginx version"; then
+        echo -e "\e[32mNginx ready, pass\033[0m"
+    else
+        echo -e "\e[32mNginx not ready, install\033[0m"
+        sudo apt install -y nginx
+    fi
+}
+
+generate_crt() {
+    if file /etc/ssl/certs/my-app.crt | grep "PEM certificate"; then
+        echo -e "\e[32mmmy-app.crt ready, pass\033[0m"
+    else
+        echo -e "\e[32mmy-app.crt not ready, generate\033[0m"
+        sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /etc/ssl/private/my-app.key \
+            -out /etc/ssl/certs/my-app.crt \
+            -subj "/CN=my-app.local"
+    fi
+}
+
+update_nginx_config() {
+    if diff -q ./nginx/my-app-nginx /etc/nginx/sites-available/my-app >/dev/null && systemctl is-active --quiet nginx; then
+        echo -e "\e[32mNginx ready, pass\033[0m"
+    else
+        echo -e "\e[32mNginx not ready, update him\033[0m"
+        sudo cp ./nginx/my-app-nginx /etc/nginx/sites-available/my-app
+        sudo ln -s /etc/nginx/sites-available/my-app /etc/nginx/sites-enabled/
+        sudo rm /etc/nginx/sites-enabled/default
+        sudo nginx -t && sudo systemctl reload nginx
     fi
 }
 
@@ -114,3 +169,8 @@ make_vg
 make_lv
 make_filesystem
 lv_mount
+docker_build
+docker_start
+install_nginx
+generate_crt
+update_nginx_config
