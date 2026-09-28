@@ -8,7 +8,7 @@ lv_name="lv_logs"
 
 install_docker() {
     if command -v docker &>/dev/null; then
-        echo -e "\e[32mPass install, Docker installed\033[0m"
+        echo -e "\e[32mDocker installed, pass\033[0m"
     else
         echo -e "\e[32mDocker non installed, start install process\033[0m"
         sudo apt remove $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc docker-buildx podman-docker containerd runc | cut -f1)
@@ -29,7 +29,11 @@ EOF
         sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
         sudo systemctl enable --now docker
         sudo systemctl status docker --no-pager || truedock
-        sudo usermod -aG docker $USER && newgrp docker
+        sudo usermod -aG docker $USER
+        newgrp docker <<'EOF'
+docker -v
+exit
+EOF
         echo -e "\e[32mSuccess install Docker!\033[0m"
         docker -v
     fi
@@ -83,12 +87,12 @@ make_lv() {
 
 make_filesystem() {
     if lsblk -f /dev/$vg_name/$lv_name | grep -q "ext4"; then
-        echo -e "\e[32mFileSystem ready, pass\033[0m"
+        echo -e "\e[32mmkfs.ext4 ready, pass\033[0m"
     else
-        echo -e "\e[32mFileSystem not ready\033[0m"
+        echo -e "\e[32mmkfs.ext4 not ready\033[0m"
         sudo mkfs.ext4 /dev/$vg_name/$lv_name
         sudo blkid
-        echo -e "\e[32mFileSystem ready\033[0m"
+        echo -e "\e[32mmkfs.ext4 ready\033[0m"
     fi
 }
 
@@ -118,6 +122,7 @@ docker_build() {
     fi
 }
 
+# Опциональная функция, если не хотим поднимать образ в systemd
 docker_start() {
     if docker compose images | grep my_app; then
         echo -e "\e[32mmy_app running, pass\033[0m"
@@ -140,7 +145,7 @@ install_nginx() {
 
 generate_crt() {
     if file /etc/ssl/certs/my-app.crt | grep "PEM certificate"; then
-        echo -e "\e[32mmmy-app.crt ready, pass\033[0m"
+        echo -e "\e[32mmy-app.crt ready, pass\033[0m"
     else
         echo -e "\e[32mmy-app.crt not ready, generate\033[0m"
         sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -152,13 +157,26 @@ generate_crt() {
 
 update_nginx_config() {
     if diff -q ./nginx/my-app-nginx /etc/nginx/sites-available/my-app >/dev/null && systemctl is-active --quiet nginx; then
-        echo -e "\e[32mNginx ready, pass\033[0m"
+        echo -e "\e[32mNginx config ready, pass\033[0m"
     else
-        echo -e "\e[32mNginx not ready, update him\033[0m"
+        echo -e "\e[32mNginx config not ready, update him\033[0m"
         sudo cp ./nginx/my-app-nginx /etc/nginx/sites-available/my-app
         sudo ln -s /etc/nginx/sites-available/my-app /etc/nginx/sites-enabled/
         sudo rm /etc/nginx/sites-enabled/default
         sudo nginx -t && sudo systemctl reload nginx
+    fi
+}
+
+make_my_app_service() {
+    if systemctl status my-app.service | grep active; then
+        echo -e "\e[32mmy-app.service ready, pass\033[0m"
+    else
+        echo -e "\e[32mmy-app.service not ready, make him\033[0m"
+        sudo cp systemd/my-app.service /etc/systemd/system/my-app.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable my-app
+        sudo systemctl start my-app
+        sudo systemctl status my-app
     fi
 }
 
@@ -170,7 +188,7 @@ make_lv
 make_filesystem
 lv_mount
 docker_build
-docker_start
 install_nginx
 generate_crt
 update_nginx_config
+make_my_app_service
