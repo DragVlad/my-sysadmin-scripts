@@ -1,0 +1,13 @@
+[Unit]
+Description=my-app service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/admin/my-sysadmin-scripts/
+ExecStart=/usr/bin/docker compose up
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
